@@ -56,9 +56,11 @@ const MOTTOS = [
   "Every expert was once a beginner. Keep going. 🌟",
 ];
 
-function buildSchedule() {
+const DEFAULT_START = "2026-05-11";
+
+function buildSchedule(startStr) {
   const schedule = {};
-  const startDate = new Date("2026-05-11");
+  const startDate = new Date(startStr);
   const queue = [];
   TOPICS.forEach(t => { for (let i = 0; i < t.count; i++) queue.push({ topic: t.name, num: i + 1, color: t.color }); });
   for (let d = 1; d <= TOTAL_DAYS; d++) {
@@ -85,12 +87,8 @@ function buildTopicDays(schedule) {
   return map;
 }
 
-const SCHEDULE = buildSchedule();
-const TOPIC_DAYS = buildTopicDays(SCHEDULE);
-const START = new Date("2026-05-11");
-
-function todayDay() {
-  const diff = Math.floor((new Date() - START) / 864e5);
+function todayDay(startStr) {
+  const diff = Math.floor((new Date() - new Date(startStr)) / 864e5);
   return Math.min(Math.max(diff + 1, 1), TOTAL_DAYS);
 }
 
@@ -146,16 +144,28 @@ function CompleteModal({ q, existing, onSave, onClose }) {
 function App() {
   const [tab, setTab] = useState("today");
   const [completed, setCompleted] = useState(() => { try { return JSON.parse(localStorage.getItem("dsa_v3")||"{}"); } catch { return {}; } });
+  const [startDate, setStartDate] = useState(() => localStorage.getItem("dsa_start") || DEFAULT_START);
+  const [editingStart, setEditingStart] = useState(false);
   const [modal, setModal] = useState(null);
   const [pomodoros, setPomodoros] = useState(0);
   const [modeIdx, setModeIdx] = useState(0);
   const [timeLeft, setTimeLeft] = useState(POMO_MODES[0].sec);
   const [running, setRunning] = useState(false);
-  const [viewDay, setViewDay] = useState(todayDay());
+  const [viewDay, setViewDay] = useState(() => todayDay(localStorage.getItem("dsa_start") || DEFAULT_START));
   const timerRef = useRef(null);
   const audioCtx = useRef(null);
-  const today = todayDay();
+  const SCHEDULE = buildSchedule(startDate);
+  const TOPIC_DAYS = buildTopicDays(SCHEDULE);
+  const today = todayDay(startDate);
   const totalSolved = Object.keys(completed).length;
+
+  useEffect(() => { localStorage.setItem("dsa_start", startDate); }, [startDate]);
+
+  function applyStartDate(val) {
+    setStartDate(val);
+    setViewDay(todayDay(val));
+    setEditingStart(false);
+  }
   const motto = MOTTOS[today % MOTTOS.length];
 
   useEffect(() => { localStorage.setItem("dsa_v3", JSON.stringify(completed)); }, [completed]);
@@ -324,7 +334,29 @@ function App() {
         {tab==="schedule" && (
           <div>
             <div style={{fontWeight:800,fontSize:17,color:"#1c1917",marginBottom:2}}>Your Battle Plan 🗓</div>
-            <div style={{fontSize:12,color:"#a8a29e",marginBottom:14}}>10 questions/day · {TOTAL_DAYS} days · all 250 covered</div>
+            <div style={{fontSize:12,color:"#a8a29e",marginBottom:12}}>10 questions/day · {TOTAL_DAYS} days · all 250 covered</div>
+
+            {/* Start date picker */}
+            <div style={{...card({padding:"12px 14px",marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12})}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>📅 Start Date</div>
+                {!editingStart && <div style={{fontSize:12,color:"#ea580c",fontWeight:600,marginTop:2}}>{new Date(startDate).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})}</div>}
+              </div>
+              {editingStart ? (
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <input type="date" defaultValue={startDate}
+                    id="start-date-input"
+                    style={{padding:"7px 10px",borderRadius:8,border:"2px solid #ea580c",background:"#fff7ed",color:"#1c1917",fontSize:13,outline:"none"}}/>
+                  <button onClick={()=>applyStartDate(document.getElementById("start-date-input").value)}
+                    style={{padding:"7px 14px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#ea580c,#dc2626)",color:"#fff",fontWeight:800,cursor:"pointer",fontSize:13}}>Set</button>
+                  <button onClick={()=>setEditingStart(false)}
+                    style={{padding:"7px 10px",borderRadius:8,border:"1px solid #e7e5e4",background:"#fafaf9",color:"#78716c",fontWeight:600,cursor:"pointer",fontSize:13}}>✕</button>
+                </div>
+              ) : (
+                <button onClick={()=>setEditingStart(true)}
+                  style={{padding:"7px 14px",borderRadius:8,border:"2px solid #ea580c",background:"#fff7ed",color:"#ea580c",fontWeight:700,cursor:"pointer",fontSize:13}}>Change</button>
+              )}
+            </div>
             {TOPICS.map((t,idx) => {
               const days = TOPIC_DAYS[t.name] ? [...TOPIC_DAYS[t.name]].sort((a,b)=>a-b) : [];
               const dayRange = days.length ? `Days ${days[0]}–${days[days.length-1]}` : "—";
@@ -443,7 +475,7 @@ function App() {
                 ))}
               </div>
               {(() => {
-                const startDow = START.getDay();
+                const startDow = new Date(startDate).getDay();
                 const cells = [];
                 for(let i=0;i<startDow;i++) cells.push(null);
                 for(let d=1;d<=TOTAL_DAYS;d++){
