@@ -144,6 +144,19 @@ function CompleteModal({ q, existing, onSave, onClose }) {
 function App() {
   const [tab, setTab] = useState("today");
   const [completed, setCompleted] = useState(() => { try { return JSON.parse(localStorage.getItem("dsa_v3")||"{}"); } catch { return {}; } });
+  const [habits, setHabits] = useState(() => { try { return JSON.parse(localStorage.getItem("dsa_habits")||"{}"); } catch { return {}; } });
+
+  const DAILY_HABITS = [
+    { id: "it_video",   label: "IT Video",                        detail: "1 hour",  emoji: "🎥" },
+    { id: "sys_design", label: "System Design Question",          detail: "1 hour",  emoji: "🏗️" },
+    { id: "claude_fp",  label: "Claude — Finance + Research",     detail: "1 hour",  emoji: "🤖" },
+  ];
+
+  function habitKey(dayNum, habitId) { return `d${dayNum}_${habitId}`; }
+  function toggleHabit(dayNum, habitId) {
+    const key = habitKey(dayNum, habitId);
+    setHabits(h => { const n = {...h}; n[key] ? delete n[key] : n[key] = Date.now(); return n; });
+  }
   const [startDate, setStartDate] = useState(() => localStorage.getItem("dsa_start") || DEFAULT_START);
   const [editingStart, setEditingStart] = useState(false);
   const [modal, setModal] = useState(null);
@@ -160,6 +173,7 @@ function App() {
   const totalSolved = Object.keys(completed).length;
 
   useEffect(() => { localStorage.setItem("dsa_start", startDate); }, [startDate]);
+  useEffect(() => { localStorage.setItem("dsa_habits", JSON.stringify(habits)); }, [habits]);
 
   function applyStartDate(val) {
     setStartDate(val);
@@ -203,6 +217,9 @@ function App() {
   const dayData = SCHEDULE[viewDay] || {};
   const dayQs = dayData.questions || [];
   const dayDone = dayQs.filter(q => completed[q.id]).length;
+  const habitsDone = DAILY_HABITS.filter(h => habits[habitKey(viewDay, h.id)]).length;
+  const dayTotal = dayQs.length + DAILY_HABITS.length;
+  const dayAllDone = dayDone === dayQs.length && habitsDone === DAILY_HABITS.length && dayQs.length > 0;
   const pct = totalSolved / 250;
   const r = 40, circ = 2 * Math.PI * r;
   const pr = 52, pcirc = 2 * Math.PI * pr;
@@ -221,7 +238,9 @@ function App() {
   let streak = 0;
   for (let d = today; d >= 1; d--) {
     const qs = SCHEDULE[d]?.questions || [];
-    if (qs.length > 0 && qs.every(q => completed[q.id])) streak++;
+    const allQsDone = qs.length > 0 && qs.every(q => completed[q.id]);
+    const allHabitsDone = DAILY_HABITS.every(h => habits[habitKey(d, h.id)]);
+    if (allQsDone && allHabitsDone) streak++;
     else break;
   }
 
@@ -276,14 +295,14 @@ function App() {
                 <div style={{fontWeight:800,fontSize:18,color:"#1c1917"}}>Day {viewDay} <span style={{color:"#a8a29e",fontSize:14,fontWeight:500}}>of {TOTAL_DAYS}</span></div>
                 <div style={{color:"#a8a29e",fontSize:12}}>{dayData.date}</div>
               </div>
-              <div style={{background:dayDone===dayQs.length&&dayQs.length>0?"#fef9c3":"#fff",border:`2px solid ${dayDone===dayQs.length&&dayQs.length>0?"#fbbf24":"#fed7aa"}`,borderRadius:10,padding:"6px 14px",fontSize:13,fontWeight:700,color:dayDone===dayQs.length&&dayQs.length>0?"#d97706":"#ea580c"}}>
-                {dayDone}/{dayQs.length} 🔥
+              <div style={{background:dayAllDone?"#fef9c3":"#fff",border:`2px solid ${dayAllDone?"#fbbf24":"#fed7aa"}`,borderRadius:10,padding:"6px 14px",fontSize:13,fontWeight:700,color:dayAllDone?"#d97706":"#ea580c"}}>
+                {dayDone + habitsDone}/{dayTotal} 🔥
               </div>
             </div>
 
             {/* Progress bar for day */}
             <div style={{height:6,background:"#fee2e2",borderRadius:6,overflow:"hidden",marginBottom:12}}>
-              <div style={{height:"100%",width:`${dayQs.length?dayDone/dayQs.length*100:0}%`,background:"linear-gradient(90deg,#f97316,#dc2626)",borderRadius:6,transition:"width 0.4s"}}/>
+              <div style={{height:"100%",width:`${dayTotal?(dayDone+habitsDone)/dayTotal*100:0}%`,background:"linear-gradient(90deg,#f97316,#dc2626)",borderRadius:6,transition:"width 0.4s"}}/>
             </div>
 
             <div style={{display:"flex",gap:8,marginBottom:12}}>
@@ -322,7 +341,33 @@ function App() {
                 </div>
               );
             })}
-            {dayDone===dayQs.length&&dayQs.length>0 && (
+            {/* Daily Habits */}
+            <div style={{marginTop:16,marginBottom:4}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#1c1917",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                <span>📚 Daily Goals</span>
+                <span style={{fontSize:11,color:"#a8a29e",fontWeight:500}}>— {habitsDone}/{DAILY_HABITS.length} done</span>
+              </div>
+              {DAILY_HABITS.map(h => {
+                const done = !!habits[habitKey(viewDay, h.id)];
+                return (
+                  <div key={h.id} onClick={()=>toggleHabit(viewDay, h.id)}
+                    style={{...card({marginBottom:8,cursor:"pointer"}),background:done?"#fffbeb":"#fff",border:`1px solid ${done?"#fbbf24":"#fed7aa"}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px"}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:done?"linear-gradient(135deg,#f97316,#dc2626)":"#fff",border:`2px solid ${done?"#dc2626":"#fed7aa"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:done?"0 2px 8px #dc262644":"none",fontSize:13}}>
+                        {done ? "✓" : <span style={{fontSize:14}}>{h.emoji}</span>}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:14,fontWeight:700,color:done?"#92400e":"#1c1917",textDecoration:done?"line-through":"none"}}>{h.label}</div>
+                        <div style={{fontSize:11,color:"#a8a29e",marginTop:1}}>{h.detail}</div>
+                      </div>
+                      {done && <span style={{fontSize:11,color:"#16a34a",fontWeight:700}}>Done ✓</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {dayAllDone && (
               <div style={{textAlign:"center",padding:18,background:"linear-gradient(135deg,#fef9c3,#fef3c7)",borderRadius:14,border:"2px solid #fbbf24",color:"#92400e",fontWeight:800,fontSize:17,marginTop:4}}>
                 🎉 Day Crushed! Keep the streak alive! 🔥
               </div>
